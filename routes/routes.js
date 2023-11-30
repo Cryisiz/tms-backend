@@ -1,34 +1,57 @@
-const express = require("express")
-const router = express.Router()
+const express = require("express");
+const router = express.Router();
 
-const { isAuthenticatedUser, authorizeRoles } = require("../middleware/auth")
-const { Checkgroup, checkLogin, loginUser, logout, registerUser, getUsers, getUser, toggleUserStatus, updateUser, updateUserEmail, updateUserPassword, createGroup, getGroups } = require("../controllers/controllers")
+const { isAuthenticatedUser, authorizeRoles } = require("../middleware/auth");
+const {
+  Checkgroup,
+  checkLogin,
+  loginUser,
+  logout,
+  registerUser,
+  getUsers,
+  getUser,
+  toggleUserStatus,
+  updateUser,
+  updateUserEmail,
+  updateUserPassword,
+  createGroup,
+  getGroups,
+  getUserGroup,
+} = require("../controllers/controllers");
 
-router.route("/login").post(loginUser)
-router.route("/_logout").get(isAuthenticatedUser, logout)
-router.route("/register").post(isAuthenticatedUser, authorizeRoles("admin"), registerUser)
-router.route("/createGroup").post(isAuthenticatedUser, authorizeRoles("admin"), createGroup)
+router.route("/login").post(loginUser);
+router.route("/_logout").get(isAuthenticatedUser, logout);
+router.route("/register").post(isAuthenticatedUser, authorizeRoles("admin"), registerUser);
+router.route("/createGroup").post(isAuthenticatedUser, authorizeRoles("admin"), createGroup);
 
-router.route("/getUsers").get(isAuthenticatedUser, getUsers)
-router.route("/getUser").get(isAuthenticatedUser, getUser)
-router.route("/toggleUserStatus/:username").put(isAuthenticatedUser, authorizeRoles("admin"), toggleUserStatus)
-router.route("/updateUser/:username").put(isAuthenticatedUser, authorizeRoles("admin"), updateUser)
-router.route("/updateUserEmail/").put(isAuthenticatedUser, updateUserEmail)
-router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword)
-router.route("/getGroups").get(isAuthenticatedUser, getGroups)
+router.route("/getUsers").get(isAuthenticatedUser, getUsers);
+router.route("/getUser").get(isAuthenticatedUser, getUser);
+router
+  .route("/toggleUserStatus/:username")
+  .put(isAuthenticatedUser, authorizeRoles("admin"), toggleUserStatus);
+router.route("/updateUser/:username").put(isAuthenticatedUser, authorizeRoles("admin"), updateUser);
+router.route("/updateUserEmail/").put(isAuthenticatedUser, updateUserEmail);
+router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword);
+router.route("/getGroups").get(isAuthenticatedUser, getGroups);
+
+router.route("/getUserGroup").get(isAuthenticatedUser, async (req, res, next) => {
+  const token = req.token;
+  const result = await getUserGroup(token);
+  res.json(result);
+});
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
-  const username = req.user.username
-  const group = req.body.group
+  const username = req.user.username;
+  const group = req.body.group;
 
-  const result = await Checkgroup(username, group)
-  res.json(result)
-})
+  const result = await Checkgroup(username, group);
+  res.json(result);
+});
 
 router.route("/checkLogin").get(isAuthenticatedUser, async (req, res, next) => {
-  const token = req.token
-  const result = await checkLogin(token)
-  res.json(result)
-})
+  const token = req.token;
+  const result = await checkLogin(token);
+  res.json(result);
+});
 
-module.exports = router
+module.exports = router;
