@@ -43,7 +43,6 @@ router.route("/getUserGroup").get(isAuthenticatedUser, async (req, res, next) =>
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;
   const group = req.body.group;
-
   const result = await Checkgroup(username, group);
   res.json(result);
 });
