@@ -412,8 +412,7 @@ const sendToken = (user, statusCode, res) => {
   res.status(statusCode).cookie("token", token, options).json({
     success: true,
     token,
-    group_list: user.group_list,
-    username: user.username,
+    expire: process.env.COOKIE_EXPIRES_TIME,
   });
 };
 
