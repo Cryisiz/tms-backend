@@ -154,7 +154,7 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Create a group => /groupController/createGroup
+// Create a group => /controller/createGroup
 exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   //Check if user is authorized to create group
   const { group_name } = req.body;
@@ -196,7 +196,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Get all users => /userController/getUsers
+// Get all users => /controller/getUsers
 exports.getUsers = catchAsyncErrors(async (req, res, next) => {
   const [rows, fields] = await connection
     .promise()
@@ -222,7 +222,7 @@ exports.getUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Toggle user status => /userController/toggleUserStatus/:username
+// Toggle user status => /controller/toggleUserStatus/:username
 exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection
     .promise()
@@ -250,7 +250,7 @@ exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update a user (admin) => /userController/updateUser/:username
+// Update a user (admin) => /controller/updateUser/:username
 exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection
     .promise()
@@ -312,7 +312,7 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update user email (user) => /userController/updateUserEmail/:username
+// Update user email (user) => /controller/updateUserEmail/:username
 exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection
@@ -336,7 +336,7 @@ exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update user password (user) => /userController/updateUserPassword/:username
+// Update user password (user) => /controller/updateUserPassword/:username
 exports.updateUserPassword = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection
