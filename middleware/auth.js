@@ -35,7 +35,7 @@ exports.isAuthenticatedUser = catchAsyncErrors(async (req, res, next) => {
   req.token = token;
 
   if (req.user.is_disabled === 1) {
-    return next(new ErrorHandler("Invalid username and password", 401));
+    return next(new ErrorHandler("Unauthorized User", 401));
   }
   next();
 });
