@@ -205,7 +205,7 @@ exports.getUsers = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Get a user => /userController/getUser
+// Get a user => /controller/getUser
 exports.getUser = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection
