@@ -74,7 +74,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
     .promise()
     .query("SELECT * FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
-    return next(new ErrorResponse("User not found", 401));
+    return next(new ErrorResponse("Invalid username or password", 401));
   }
   //get user from row
   const user = row[0];
@@ -87,7 +87,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
 
   //Check if user is disabled
   if (user.is_disabled === 1) {
-    return next(new ErrorResponse("User is disabled", 401));
+    return next(new ErrorResponse("Invalid username or password", 401));
   }
 
   //Send token
