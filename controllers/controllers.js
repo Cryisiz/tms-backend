@@ -59,18 +59,6 @@ exports.checkLogin = catchAsyncErrors(async function (token) {
   return true;
 });
 
-//get user groups
-exports.getUserGroup = catchAsyncErrors(async function (token) {
-  let decoded;
-  decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT group_list FROM user WHERE username = ?", [decoded.username]);
-  const groups = row[0];
-  return groups;
-});
-
 // Login a user => /login
 exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   //get username and password from request body
@@ -212,7 +200,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
 exports.getUsers = catchAsyncErrors(async (req, res, next) => {
   const [rows, fields] = await connection
     .promise()
-    .query("SELECT username,email,group_list,is_disabled FROM user");
+    .query("SELECT username,email,group_list,is_disabled FROM user where not username='root'");
   res.status(200).json({
     success: true,
     data: rows,
