@@ -156,7 +156,6 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
 
 // Create a group => /controller/createGroup
 exports.createGroup = catchAsyncErrors(async (req, res, next) => {
-  //Check if user is authorized to create group
   const { group_name } = req.body;
 
   //split group_name by comma
