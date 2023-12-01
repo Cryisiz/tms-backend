@@ -183,7 +183,6 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
       .promise()
       .execute("INSERT INTO usergroups (group_name) VALUES (?)", [group_name_list[i]]);
 
-    //@TODO:
     if (result[0].affectedRows === 0) {
       return next(new ErrorResponse("Failed to create group", 500));
     }
