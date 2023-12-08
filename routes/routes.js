@@ -20,7 +20,6 @@ const {
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
-router.route("/_logout").get(isAuthenticatedUser, logout);
 router.route("/register").post(isAuthenticatedUser, authorizeRoles("admin"), registerUser);
 router.route("/createGroup").post(isAuthenticatedUser, authorizeRoles("admin"), createGroup);
 
