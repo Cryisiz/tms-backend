@@ -34,7 +34,7 @@ exports.Checkgroup = async function (userid, groupname) {
   return true;
 };
 
-exports.checkLogin = catchAsyncErrors(async function (token) {
+exports.check = catchAsyncErrors(async function (token) {
   if (token === "null" || !token) {
     return false;
   }
@@ -92,15 +92,6 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
 
   //Send token
   sendToken(user, 200, res);
-});
-
-// Logout a user => /_logout
-exports.logout = catchAsyncErrors(async (req, res, next) => {
-  //Send response
-  res.status(200).json({
-    success: true,
-    message: "Logged out",
-  });
 });
 
 // Create a user => /register
