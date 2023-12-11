@@ -59,6 +59,31 @@ exports.check = catchAsyncErrors(async function (token) {
   return true;
 });
 
+exports.checkLogin = catchAsyncErrors(async function (token) {
+  if (token === "null" || !token) {
+    return false;
+  }
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM user WHERE username = ?", [decoded.username]);
+  const user = row[0];
+  if (user === undefined) {
+    return false;
+  }
+
+  if (user.is_disabled === 1) {
+    return false;
+  }
+  return true;
+});
+
 // Login a user => /login
 exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   //get username and password from request body
