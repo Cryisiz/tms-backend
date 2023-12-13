@@ -13,6 +13,172 @@ const connection = mysql.createConnection({
 });
 if (connection) console.log(`MySQL Database connected with host: ${process.env.DB_HOST}`);
 
+//Update App details => /controller/updateApp/:appname
+exports.updateApp = catchAsyncErrors(async (req, res, next) => {
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [req.params.appname]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("App not found", 404));
+  }
+  const app = row[0];
+  //the fields are optional to update, so we need to build the query dynamically
+  let query = "UPDATE application SET ";
+  let values = [];
+  //Updatable fields are start/end dates, description, App permissions.
+  if (req.body.startDate) {
+    query += "App_startDate = ?, ";
+    values.push(req.body.startDate);
+  } else if (req.body.startDate === undefined) {
+    query += "App_startDate = ?, ";
+    values.push(null);
+  }
+  if (req.body.endDate) {
+    query += "App_endDate = ?, ";
+    values.push(req.body.endDate);
+  } else if (req.body.endDate === undefined) {
+    query += "App_endDate = ?, ";
+    values.push(null);
+  }
+  if (req.body.description) {
+    query += "App_Description = ?, ";
+    values.push(req.body.description);
+  } else if (req.body.description === undefined) {
+    query += "App_Description = ?, ";
+    values.push("");
+  }
+  if (req.body.permCreate) {
+    query += "App_permit_create = ?, ";
+    values.push(req.body.permCreate);
+  }
+  if (req.body.permOpen) {
+    query += "App_permit_Open = ?, ";
+    values.push(req.body.permOpen);
+  }
+  if (req.body.permToDo) {
+    query += "App_permit_toDoList = ?, ";
+    values.push(req.body.permToDo);
+  }
+  if (req.body.permDoing) {
+    query += "App_permit_Doing = ?, ";
+    values.push(req.body.permDoing);
+  }
+  if (req.body.permDone) {
+    query += "App_permit_Done = ?, ";
+    values.push(req.body.permDone);
+  }
+  //group can be empty, if it is empty we should update the permission to empty
+  if (req.body.permCreate === "") {
+    query += "App_permit_create = ?, ";
+    values.push("");
+  }
+  if (req.body.permOpen === "") {
+    query += "App_permit_Open = ?, ";
+    values.push("");
+  }
+  if (req.body.permToDo === "") {
+    query += "App_permit_toDoList = ?, ";
+    values.push("");
+  }
+  if (req.body.permDoing === "") {
+    query += "App_permit_Doing = ?, ";
+    values.push("");
+  }
+  if (req.body.permDone === "") {
+    query += "App_permit_Done = ?, ";
+    values.push("");
+  }
+  //remove the last comma and space
+  query = query.slice(0, -2);
+  //add the where clause
+  query += " WHERE App_Acronym = ?";
+  values.push(req.params.appname);
+  const result = await connection.promise().execute(query, values);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to update app", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "App updated successfully",
+  });
+});
+
+// Get all app => /controller/getAllApp
+exports.getAllApp = catchAsyncErrors(async (req, res, next) => {
+  const [rows, fields] = await connection.promise().query("SELECT * FROM application");
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
+// Create App => /createApp
+exports.createApp = catchAsyncErrors(async (req, res, next) => {
+  const {
+    application,
+    startDate,
+    endDate,
+    description,
+    permCreate,
+    permOpen,
+    permToDo,
+    permDoing,
+    permDone,
+    rnum,
+  } = req.body;
+
+  if (
+    req.body.application === "" ||
+    req.body.application === null ||
+    req.body.description === "" ||
+    req.body.description === null ||
+    req.body.rnum === "" ||
+    req.body.rum === null
+  ) {
+    return next(new ErrorResponse("Please enter App Acronym and Description and Rnum", 400));
+  }
+
+  const rnumRegex = /^\d+$/;
+  if (!rnumRegex.test(rnum)) {
+    return next(new ErrorResponse("Rnum can only be integer and not negative", 400));
+  }
+
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute(
+        "INSERT INTO application (App_Acronym,App_Description,App_Rnumber,App_startDate,App_endDate,App_permit_Open," +
+          "App_permit_toDoList,App_permit_Doing,App_permit_Done,App_permit_create) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [
+          application,
+          description,
+          rnum,
+          startDate,
+          endDate,
+          permOpen,
+          permToDo,
+          permDoing,
+          permDone,
+          permCreate,
+        ]
+      );
+  } catch (err) {
+    //check duplicate entry
+    if (err.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("App Acronym already exists", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create App", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "App created successfully",
+  });
+});
 // checkGroup(username, group) to check if a user is in a group
 exports.Checkgroup = async function (userid, groupname) {
   //get user from database
