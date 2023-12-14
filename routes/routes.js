@@ -6,7 +6,6 @@ const {
   Checkgroup,
   checkLogin,
   loginUser,
-  logout,
   registerUser,
   getUsers,
   getUser,
@@ -19,6 +18,10 @@ const {
   createApp,
   getAllApp,
   updateApp,
+  createTask,
+  createPlan,
+  updatePlan,
+  getAllPlan,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
@@ -36,8 +39,14 @@ router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword
 router.route("/getGroups").get(isAuthenticatedUser, getGroups);
 
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
-router.route("/getAllApp").get(isAuthenticatedUser, getAllApp);
+router.route("/getAllApp").get(isAuthenticatedUser, authorizeRoles("PL"), getAllApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
+
+router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
+router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), updatePlan);
+router.route("/getAllPlan").post(isAuthenticatedUser, authorizeRoles("PM"), getAllPlan);
+
+router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;

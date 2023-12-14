@@ -13,6 +13,88 @@ const connection = mysql.createConnection({
 });
 if (connection) console.log(`MySQL Database connected with host: ${process.env.DB_HOST}`);
 
+//Create Plan => /controller/createPlan
+exports.createPlan = catchAsyncErrors(async (req, res, next) => {
+  const { plan, startDate, endDate, colors, acronym } = req.body;
+
+  if (req.body.plan === "" || null) {
+    return next(new ErrorResponse("Please enter input for the Plan name", 400));
+  }
+
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute(
+        "INSERT INTO plan (Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym, Plan_color) VALUES (?,?,?,?,?)",
+        [plan, startDate, endDate, acronym, colors]
+      );
+  } catch (error) {
+    //check duplicate entry
+    if (error.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("Plan name already exists", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create plan", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Plan created successfully",
+  });
+});
+
+//Create Task => /controller/createTask
+exports.createTask = catchAsyncErrors(async (req, res, next) => {
+  const { name, description, acronym } = req.body;
+  const token = req.token;
+  if (req.body.name === "" || null) {
+    return next(new ErrorResponse("Please enter input for the Task name", 400));
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+
+  let notes = decoded.username + " Open " + Date.now();
+  let rnum = await connection
+    .promise()
+    .execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
+  let rnumber = rnum[0][0].App_Rnumber + 1;
+  let Task_id = acronym + rnumber;
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute(
+        "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?)",
+        [name, description, notes, Task_id, acronym, "open", decoded.username, decoded.username]
+      );
+    updateRnum = await connection
+      .promise()
+      .execute("UPDATE application SET App_Rnumber = ? where App_Acronym = ?", [rnumber, acronym]);
+  } catch (error) {
+    //check duplicate entry
+    if (error.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("Task name already exists", 400));
+    } else {
+      return next(new ErrorResponse("Task failed", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create Task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task created successfully",
+  });
+});
+
 //Update App details => /controller/updateApp/:appname
 exports.updateApp = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection
@@ -104,6 +186,31 @@ exports.updateApp = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// updatePlan => /controller/updatePlan
+exports.updatePlan = catchAsyncErrors(async (req, res, next) => {
+  const { planAcronym, startDate, endDate, planName } = req.body;
+  const [rows, fields] = await connection
+    .promise()
+    .query(
+      "UPDATE plan SET Plan_startDate=?,Plan_endDate=? WHERE Plan_MVP_name=? AND Plan_app_Acronym=?",
+      [startDate, endDate, planName, planAcronym]
+    );
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+// Get all plan by plan name => /controller/getAllPlan
+exports.getAllPlan = catchAsyncErrors(async (req, res, next) => {
+  const { Plan_app_Acronym } = req.body;
+  const [rows, fields] = await connection
+    .promise()
+    .query("SELECT * FROM plan where Plan_app_Acronym=?", [Plan_app_Acronym]);
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
 // Get all app => /controller/getAllApp
 exports.getAllApp = catchAsyncErrors(async (req, res, next) => {
   const [rows, fields] = await connection.promise().query("SELECT * FROM application");
