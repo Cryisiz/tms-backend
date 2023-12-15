@@ -22,6 +22,7 @@ const {
   createPlan,
   updatePlan,
   getAllPlan,
+  getTask,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
@@ -47,6 +48,7 @@ router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), upda
 router.route("/getAllPlan").post(isAuthenticatedUser, authorizeRoles("PM"), getAllPlan);
 
 router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
+router.route("/getTask").post(isAuthenticatedUser, getTask);
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;

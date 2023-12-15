@@ -13,6 +13,18 @@ const connection = mysql.createConnection({
 });
 if (connection) console.log(`MySQL Database connected with host: ${process.env.DB_HOST}`);
 
+// Get task by taskid => /controller/getTask
+exports.getTask = catchAsyncErrors(async (req, res, next) => {
+  const { taskid } = req.body;
+  const [rows, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task where Task_id=?", [taskid]);
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
 //Create Plan => /controller/createPlan
 exports.createPlan = catchAsyncErrors(async (req, res, next) => {
   const { plan, startDate, endDate, colors, acronym } = req.body;
@@ -197,7 +209,7 @@ exports.updatePlan = catchAsyncErrors(async (req, res, next) => {
     );
   res.status(200).json({
     success: true,
-    data: rows,
+    message: "Plan created successfully",
   });
 });
 // Get all plan by plan name => /controller/getAllPlan
