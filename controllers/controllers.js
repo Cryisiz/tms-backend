@@ -13,15 +13,606 @@ const connection = mysql.createConnection({
 });
 if (connection) console.log(`MySQL Database connected with host: ${process.env.DB_HOST}`);
 
-// Get task by taskid => /controller/getTask
-exports.getTask = catchAsyncErrors(async (req, res, next) => {
-  const { taskid } = req.body;
+const validatePermit = catchAsyncErrors(async (App_Acronym, Task_state, user) => {
+  //Check if application exists
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [App_Acronym]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const application = row[0];
+  //Depending on the state, access the permit of the application
+  let permit_state;
+  switch (Task_state) {
+    case "create":
+      permit_state = application.App_permit_create;
+      break;
+    case "Open":
+      permit_state = application.App_permit_Open;
+      break;
+    case "ToDo":
+      permit_state = application.App_permit_toDoList;
+      break;
+    case "Doing":
+      permit_state = application.App_permit_Doing;
+      break;
+    case "Done":
+      permit_state = application.App_permit_Done;
+      break;
+    default:
+      return next(new ErrorResponse("Invalid task state", 400));
+    //check permit if it is null
+  }
+  if (permit_state === null || permit_state === undefined) {
+    return false;
+  }
+
+  //Get user's groups
+  const [row2, fields3] = await connection
+    .promise()
+    .query("SELECT * FROM user WHERE username = ?", [user]);
+  if (row2.length === 0) {
+    return next(new ErrorResponse("User does not exist", 404));
+  }
+
+  //Get the user's groups
+  const user_groups = row2[0].group_list.split(",");
+  //Check if any of the user's groups is included in the permit array, then the user is authorized. The group has to match exactly
+  //for each group in the group array, check match exact as group parameter
+  const authorised = user_groups.includes(permit_state);
+  //Since permit can only have one group, we just need to check if the user's groups contains the permit
+  if (!authorised) {
+    return false;
+  }
+  return true;
+});
+
+// Get a specific app => /controller/getApp
+exports.getApp = catchAsyncErrors(async (req, res, next) => {
   const [rows, fields] = await connection
     .promise()
-    .query("SELECT * FROM task where Task_id=?", [taskid]);
+    .query("SELECT * FROM application WHERE App_Acronym =?", [req.body.acronym]);
   res.status(200).json({
     success: true,
     data: rows,
+  });
+});
+
+//getTasksByApp => /controller/getTasksByApp/:App_Acronym
+exports.getTasksByApp = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to get tasks
+  const App_Acronym = req.params.App_Acronym;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [App_Acronym]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+  const application = row[0];
+  //I want to pull out all the tasks that belong to this application as well as the Plan_color that belongs to each task
+  //SELECT task.*, plan.Plan_color FROM task LEFT JOIN plan ON task.Task_plan = plan.Plan_MVP_name WHERE Task_app_Acronym = "test";
+  const [row2, fields2] = await connection
+    .promise()
+    .query(
+      "SELECT task.*, plan.Plan_color FROM task LEFT JOIN plan ON task.Task_plan = plan.Plan_MVP_name AND task.Task_app_Acronym = plan.Plan_app_Acronym WHERE Task_app_Acronym = ?",
+      [App_Acronym]
+    );
+  if (row2.length === 0) {
+    return next(new ErrorResponse("No tasks found", 404));
+  }
+  // const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_app_acronym = ?", [App_Acronym])
+  // if (row2.length === 0) {
+  //   return next(new ErrorResponse("No tasks found", 404))
+  // }
+  res.status(200).json({
+    success: true,
+    data: row2,
+  });
+});
+//returnTask => /controller/returnTask/:Task_id
+exports.returnTask = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to return task
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(
+    row[0].Task_app_Acronym,
+    row[0].Task_state,
+    req.user.username
+  );
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is not Doing, we cannot return the task
+  if (Task_state !== "Doing") {
+    return next(new ErrorResponse("You cannot return a task that is not Doing", 400));
+  }
+  //The state will always be ToDo when returning a task
+  const nextState = "ToDo";
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+  let Added_Task_notes;
+  if (
+    req.body.Task_notes === undefined ||
+    req.body.Task_notes === null ||
+    req.body.Task_notes === ""
+  ) {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate +
+      "\n" +
+      req.body.Task_notes;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [
+      Task_notes,
+      nextState,
+      Task_owner,
+      Task_id,
+    ]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to return task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task returned successfully",
+  });
+});
+
+// rejectTask => /controller/rejectTask/:Task_id
+exports.rejectTask = catchAsyncErrors(async (req, res, next) => {
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(
+    row[0].Task_app_Acronym,
+    row[0].Task_state,
+    req.user.username
+  );
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is not Done, we cannot reject the task
+  if (Task_state !== "Done") {
+    return next(new ErrorResponse("You cannot reject a task that is not Done", 400));
+  }
+  //The state will always be Doing when rejecting a task
+  const nextState = "Doing";
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+  let Added_Task_notes;
+  if (
+    req.body.Task_notes === undefined ||
+    req.body.Task_notes === null ||
+    req.body.Task_notes === ""
+  ) {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate +
+      "\n" +
+      req.body.Task_notes;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+
+  //Task_plan can be updated if it is provided
+  let Task_plan;
+  if (req.body.Task_plan === undefined || null) {
+    Task_plan = row[0].Task_plan;
+  } else {
+    Task_plan = req.body.Task_plan;
+  }
+
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute(
+      "UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ?, Task_plan = ? WHERE Task_id = ?",
+      [Task_notes, nextState, Task_owner, Task_plan, Task_id]
+    );
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to reject task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task rejected successfully",
+  });
+});
+
+//promoteTask => /controller/promoteTask/:Task_id
+exports.promoteTask = catchAsyncErrors(async (req, res, next) => {
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(
+    row[0].Task_app_Acronym,
+    row[0].Task_state,
+    req.user.username
+  );
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is Close, we cannot promote the task
+  if (Task_state === "Close") {
+    return next(new ErrorResponse("You cannot promote a task that is Closed", 400));
+  }
+  //Depending on the current state, we will update the state to the next state
+  let nextState;
+  switch (Task_state) {
+    case "Open":
+      nextState = "ToDo";
+      break;
+    case "ToDo":
+      nextState = "Doing";
+      break;
+    case "Doing":
+      nextState = "Done";
+      break;
+    case "Done":
+      nextState = "Close";
+      break;
+    default:
+      nextState = "Close";
+  }
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+
+  let Added_Task_notes;
+  if (
+    req.body.Task_notes === undefined ||
+    req.body.Task_notes === null ||
+    req.body.Task_notes === ""
+  ) {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " moved " +
+      row[0].Task_name +
+      " from " +
+      Task_state +
+      " to " +
+      nextState +
+      " on " +
+      formattedDate +
+      "\n" +
+      req.body.Task_notes;
+  }
+
+  //Append Task_notes to the preexisting Task_notes, I want it to have two new lines between the old notes and the new notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [
+      Task_notes,
+      nextState,
+      Task_owner,
+      Task_id,
+    ]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to promote task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task promoted successfully",
+  });
+
+  if (Task_state === "Doing" && nextState === "Done") {
+    sendEmailToProjectLead(row[0].Task_name, Task_owner, row[0].Task_app_Acronym);
+  }
+});
+
+async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
+  //We need to pull the App_permit_Done group
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [Task_app_acronym]);
+
+  const group = row[0].App_permit_Done;
+
+  //We need to pull the emails of all users
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM user");
+  const users = row2;
+
+  //We need to pull the emails of all users that are in the group
+  let emails = [];
+  for (let i = 0; i < users.length; i++) {
+    const user = users[i];
+    const user_groups = user.group_list.split(",");
+    if (user_groups.includes(group)) {
+      //check if email is null or undefined
+      if (user.email !== null && user.email !== undefined) {
+        emails.push(user.email);
+      }
+    }
+  }
+
+  // Set up transporter
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  // Define mail options
+  const mailOptions = {
+    from: `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`,
+    to: emails, // Replace with the actual project lead's email
+    subject: `Task Promotion Notification`,
+    text: `The task "${taskName}" has been promoted to "Done" by ${taskOwner}.`,
+  };
+
+  // Send the email
+  try {
+    // await transporter.sendMail(mailOptions)
+    console.log("Email sent successfully.");
+  } catch (error) {
+    console.error("Failed to send email:", error);
+  }
+}
+
+//getApplication => /controller/getApplication/:App_Acronym
+exports.getApplication = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to get application
+  const App_Acronym = req.params.App_Acronym;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [App_Acronym]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+  res.status(200).json({
+    success: true,
+    data: row[0],
+  });
+});
+
+// Update tasknotes by taskid => /controller/updateTasknotes/: taskid
+exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [req.params.taskId]);
+  const token = req.token;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+
+  //We should append the notes to the existing notes, so we need to get the existing notes first
+  const existing_notes = row[0].Task_notes;
+  //Append the existing notes with the new notes
+  req.body.Task_notes =
+    req.body.Task_notes + " by " + decoded.username + " " + formattedDate + "\n\n" + existing_notes;
+
+  //Update notes
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ? WHERE Task_id = ?", [
+      req.body.Task_notes,
+      req.params.taskId,
+    ]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to update notes", 500));
+  }
+  updateOwner = await connection
+    .promise()
+    .execute("UPDATE task SET Task_owner = ? WHERE Task_id = ?", [
+      decoded.username,
+      req.params.taskId,
+    ]);
+  res.status(200).json({
+    success: true,
+    message: "Task notes updated successfully",
+  });
+});
+//assignTaskToPlan => /controller/assignTaskToPlan/:task_id
+exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to assign plan to task
+  const { acronym, plan } = req.body;
+  const Task_id = req.params.taskId;
+  const token = req.token;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM plan WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?", [acronym, plan]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Plan does not exist", 404));
+  }
+
+  //Check if task exists
+  const [row2, fields2] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row2.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if application exists
+  const [row3, fields3] = await connection
+    .promise()
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [acronym]);
+  if (row3.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+
+  //Check if any of the required parameters are not provided
+  if (!acronym || !plan) {
+    return next(new ErrorResponse("Invalid input", 400));
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+  //Get the Task_owner from the req.user.username
+  const Task_owner = decoded.username;
+  let Added_Task_notes;
+  if (req.body.note === undefined || req.body.note === null || req.body.note === "") {
+    //append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
+    Added_Task_notes =
+      Task_owner + " assigned " + row2[0].Task_name + " to " + plan + " " + formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
+    Added_Task_notes =
+      Task_owner +
+      " assigned " +
+      row2[0].Task_name +
+      " to " +
+      plan +
+      "\n" +
+      req.body.note +
+      " " +
+      formattedDate;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row2[0].Task_notes;
+
+  //Update the task including the task_owner
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_plan = ?, Task_owner = ? WHERE Task_id = ?", [
+      Task_notes,
+      plan,
+      Task_owner,
+      Task_id,
+    ]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to assign plan to task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Plan assigned to task successfully",
+  });
+});
+
+// getTask => /controller/getTask/:Task_id
+exports.getTask = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to get task
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection
+    .promise()
+    .query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+  res.status(200).json({
+    success: true,
+    data: row[0],
   });
 });
 
@@ -84,7 +675,7 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
       .promise()
       .execute(
         "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?)",
-        [name, description, notes, Task_id, acronym, "open", decoded.username, decoded.username]
+        [name, description, notes, Task_id, acronym, "Open", decoded.username, decoded.username]
       );
     updateRnum = await connection
       .promise()
