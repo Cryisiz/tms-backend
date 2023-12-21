@@ -63,7 +63,7 @@ router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword
 
 //app
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
-router.route("/getAllApp").get(isAuthenticatedUser, authorizeRoles("PL"), getAllApp);
+router.route("/getAllApp").get(isAuthenticatedUser, getAllApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
 router.route("/getApplication/:App_Acronym").get(isAuthenticatedUser, getApplication);
 router.route("/getApp").post(isAuthenticatedUser, getApp);
@@ -71,7 +71,7 @@ router.route("/getApp").post(isAuthenticatedUser, getApp);
 //plan
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
 router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), updatePlan);
-router.route("/getAllPlan").post(isAuthenticatedUser, authorizeRoles("PM"), getAllPlan);
+router.route("/getAllPlan").post(isAuthenticatedUser, getAllPlan);
 
 //task
 router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
@@ -83,7 +83,7 @@ router.route("/updateTasknotes/:taskId").post(isAuthenticatedUser, updateTasknot
 router.route("/getTasksByApp/:App_Acronym").get(isAuthenticatedUser, getTasksByApp);
 
 router
-  .route("/assignTaskToPlan/:taskId")
-  .post(isAuthenticatedUser, authorizeRoles("PM"), assignTaskToPlan);
+  .route("/assignTaskToPlan/:Task_id")
+  .put(isAuthenticatedUser, authorizeRoles("PM", "PL"), assignTaskToPlan);
 
 module.exports = router;

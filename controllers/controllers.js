@@ -3,6 +3,7 @@ const ErrorResponse = require("../utils/errorHandler");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mysql = require("mysql2");
+const nodemailer = require("nodemailer");
 
 //Setting up database connection
 const connection = mysql.createConnection({
@@ -100,9 +101,7 @@ exports.getTasksByApp = catchAsyncErrors(async (req, res, next) => {
       "SELECT task.*, plan.Plan_color FROM task LEFT JOIN plan ON task.Task_plan = plan.Plan_MVP_name AND task.Task_app_Acronym = plan.Plan_app_Acronym WHERE Task_app_Acronym = ?",
       [App_Acronym]
     );
-  if (row2.length === 0) {
-    return next(new ErrorResponse("No tasks found", 404));
-  }
+
   // const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_app_acronym = ?", [App_Acronym])
   // if (row2.length === 0) {
   //   return next(new ErrorResponse("No tasks found", 404))
@@ -428,7 +427,7 @@ async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
       }
     }
   }
-
+  console.log(emails);
   // Set up transporter
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -446,10 +445,11 @@ async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
     subject: `Task Promotion Notification`,
     text: `The task "${taskName}" has been promoted to "Done" by ${taskOwner}.`,
   };
+  console.log(mailOptions);
 
   // Send the email
   try {
-    // await transporter.sendMail(mailOptions)
+    //transporter.sendMail(mailOptions);
     console.log("Email sent successfully.");
   } catch (error) {
     console.error("Failed to send email:", error);
@@ -492,7 +492,7 @@ exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
   const existing_notes = row[0].Task_notes;
   //Append the existing notes with the new notes
   req.body.Task_notes =
-    req.body.Task_notes + " by " + decoded.username + " " + formattedDate + "\n\n" + existing_notes;
+    decoded.username + " " + formattedDate + "\n" + req.body.Task_notes + "\n\n" + existing_notes;
 
   //Update notes
   const result = await connection
@@ -518,14 +518,14 @@ exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
 //assignTaskToPlan => /controller/assignTaskToPlan/:task_id
 exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   //Check if user is authorized to assign plan to task
-  const { acronym, plan } = req.body;
-  const Task_id = req.params.taskId;
-  const token = req.token;
-  const date = new Date(Date.now());
-  const formattedDate = date.toLocaleString();
+  const { Plan_app_Acronym, Plan_MVP_name } = req.body;
+  const Task_id = req.params.Task_id;
   const [row, fields] = await connection
     .promise()
-    .query("SELECT * FROM plan WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?", [acronym, plan]);
+    .query("SELECT * FROM plan WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?", [
+      Plan_app_Acronym,
+      Plan_MVP_name,
+    ]);
   if (row.length === 0) {
     return next(new ErrorResponse("Plan does not exist", 404));
   }
@@ -541,29 +541,23 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   //Check if application exists
   const [row3, fields3] = await connection
     .promise()
-    .query("SELECT * FROM application WHERE App_Acronym = ?", [acronym]);
+    .query("SELECT * FROM application WHERE App_Acronym = ?", [Plan_app_Acronym]);
   if (row3.length === 0) {
     return next(new ErrorResponse("Application does not exist", 404));
   }
 
   //Check if any of the required parameters are not provided
-  if (!acronym || !plan) {
+  if (!Plan_app_Acronym || !Plan_MVP_name) {
     return next(new ErrorResponse("Invalid input", 400));
   }
 
-  let decoded;
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    return false;
-  }
   //Get the Task_owner from the req.user.username
-  const Task_owner = decoded.username;
+  const Task_owner = req.user.username;
   let Added_Task_notes;
-  if (req.body.note === undefined || req.body.note === null || req.body.note === "") {
+  if (req.body.Task_notes === undefined || null) {
     //append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
     Added_Task_notes =
-      Task_owner + " assigned " + row2[0].Task_name + " to " + plan + " " + formattedDate;
+      Task_owner + " assigned " + row2[0].Task_name + " to " + Plan_MVP_name + "\n";
   } else {
     //Get the Task_notes from the req.body.Task_notes and append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
     Added_Task_notes =
@@ -571,22 +565,21 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
       " assigned " +
       row2[0].Task_name +
       " to " +
-      plan +
+      Plan_MVP_name +
       "\n" +
-      req.body.note +
-      " " +
-      formattedDate;
+      req.body.Task_notes +
+      "\n";
   }
 
   //Append Task_notes to the preexisting Task_notes
-  const Task_notes = Added_Task_notes + "\n\n" + row2[0].Task_notes;
+  const Task_notes = Added_Task_notes + "\n" + row2[0].Task_notes;
 
   //Update the task including the task_owner
   const result = await connection
     .promise()
     .execute("UPDATE task SET Task_notes = ?, Task_plan = ?, Task_owner = ? WHERE Task_id = ?", [
       Task_notes,
-      plan,
+      Plan_MVP_name,
       Task_owner,
       Task_id,
     ]);
@@ -662,8 +655,9 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
   } catch (err) {
     return false;
   }
-
-  let notes = decoded.username + " Open " + Date.now();
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+  let notes = decoded.username + " Open " + formattedDate;
   let rnum = await connection
     .promise()
     .execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
